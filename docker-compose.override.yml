@@ -1,0 +1,54 @@
+# Extra services started alongside Airflow by `astro dev start`.
+# Astro's own compose file defines the `airflow` network; joining it lets the
+# Airflow containers reach MongoDB with the hostname `mongo`.
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db          # persistent storage
+    networks:
+      - airflow                      # docker networking
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      meta.description: "MongoDB primary database for currency exchange rates"
+      meta.networking: "Attached to the 'airflow' bridge network; reachable at mongo:27017 from Airflow and Mongo Express"
+      meta.persistent-storage: "Named volume 'mongo_data' mounted at /data/db"
+
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: mongo-express
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongo
+      ME_CONFIG_MONGODB_PORT: "27017"
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: admin123
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    ports:
+      - "8081:8081"
+    networks:
+      - airflow
+    labels:
+      meta.description: "Mongo Express web admin UI for MongoDB"
+      meta.networking: "Attached to the 'airflow' bridge network; connects to MongoDB via hostname 'mongo'"
+      meta.persistent-storage: "Stateless; all data lives in MongoDB's 'mongo_data' volume"
+
+volumes:
+  mongo_data:
+    labels:
+      meta.description: "Persistent storage for MongoDB data files"
